@@ -26,3 +26,9 @@ tags: [localStorage, BroadcastChannel, atomicity, zombie-lock]
 
 - **輪詢與退避演算法過於複雜**：若強行用 `localStorage` 實作心跳檢測（Heartbeat）與過期時間戳（TTL）來清除殭屍鎖，會引入大量難以維護的計時器與邊界條件 Bug，違背輕量化設計初衷。
 - **效能瓶頸**：`localStorage` 為同步阻塞 I/O（Synchronous I/O），高頻率讀寫會直接卡頓主執行緒的畫面渲染。
+
+## 參考來源 (Sources)
+
+- [S4] MDN — Web Storage API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
+- [S5] MDN — Window: storage event：https://developer.mozilla.org/en-US/docs/Web/Events/storage
+- [S6] MDN — Broadcast Channel API：https://developer.mozilla.org/docs/Web/API/Broadcast_Channel_API

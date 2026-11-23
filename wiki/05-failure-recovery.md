@@ -27,3 +27,10 @@ tags: [deadlock, AbortController, ifAvailable, timeout, rollback]
 
 - **避免巢狀鎖定（Avoid Nested Locks）**：切勿在持有 `Lock A` 的回呼函式內部再去申請 `Lock B`，否則當另一個分頁以相反順序（先 `B` 後 `A`）申請時，即使瀏覽器原生管理員也無法解開經典的循環等待死鎖（Circular Wait Deadlock）。
 - **區分「排隊超時」與「執行超時」**：`navigator.locks.request` 的 `signal` 僅能中止「還在排隊等待取得鎖」的請求；一旦成功取得鎖並進入 `callback`，就必須依靠內部邏輯（如 `fetch` 的 `AbortSignal.timeout()`）來控制執行時間。
+
+## 參考來源 (Sources)
+
+- [S1] MDN — Web Locks API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+- [S2] MDN — LockManager: request() method：https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request
+- [S3] W3C — Web Locks API（Working Draft）：https://www.w3.org/TR/web-locks/
+- [S7] MDN — AbortSignal: timeout() static method：https://developer.mozilla.org/docs/Web/API/AbortSignal/timeout_static

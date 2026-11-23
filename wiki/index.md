@@ -30,3 +30,19 @@ principle: Zero-Runtime-Dependency（僅使用瀏覽器原生 Web API，不依�
 - **競態條件（Race Condition）**：多個分頁在缺乏協調的情況下同時讀寫同一份資源，導致最終結果取決於不可預測的執行順序。
 - **原子性（Atomicity）**：一個操作要嘛全部完成，要嘛完全不執行，中間不會被其他分頁插隊打斷。
 - **單一飛行請求（Single-Flight Request）**：當多個分頁同時需要同一份遠端資料時，僅允許一個領導分頁（Leader Tab）實際發送網路請求，其餘分頁等待並複用該結果的模式。
+
+## 資料來源與匯入紀錄（Ingest Log）
+
+以下來源已逐篇匯入並與各條目逐條核對（2026-11-23）。各條目末尾的「參考來源」段落列出該條目實際引用的編號。
+
+| 編號 | 來源 | 用於條目 |
+|---|---|---|
+| S1 | [MDN — Web Locks API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) | WIKI-01, 03, 04, 05 |
+| S2 | [MDN — LockManager: request() method](https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request) | WIKI-03, 04, 05 |
+| S3 | [W3C — Web Locks API（Working Draft）](https://www.w3.org/TR/web-locks/) | WIKI-03, 05, 06 |
+| S4 | [MDN — Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API) | WIKI-01, 02, 04, 06 |
+| S5 | [MDN — Window: storage event](https://developer.mozilla.org/en-US/docs/Web/Events/storage) | WIKI-02 |
+| S6 | [MDN — Broadcast Channel API](https://developer.mozilla.org/docs/Web/API/Broadcast_Channel_API) | WIKI-02 |
+| S7 | [MDN — AbortSignal: timeout() static method](https://developer.mozilla.org/docs/Web/API/AbortSignal/timeout_static) | WIKI-05 |
+| S8 | [Redis Docs — Distributed Locks with Redis](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/) | WIKI-06 |
+| S9 | [Auth0 Docs — Refresh Token Rotation](https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation) | WIKI-01 |

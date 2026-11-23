@@ -13,7 +13,7 @@ tags: [concurrency, race-condition, duplicate-requests, lost-update]
 在單頁應用程式（SPA）與雲端資料庫（如 Firestore）普及後，每個分頁都會在載入時主動同步資料或刷新權杖（Token）。若沒有協調機制，會引發三大嚴重後果：
 1. **重複 API 請求與費用暴增**：使用者開啟 5 個分頁，前端就同時向後端或雲端資料庫發送 5 次一模一樣的查詢，造成 5 倍的讀取計費與頻寬浪費。
 2. **資料覆寫遺失（Lost Update）**：分頁 A 與分頁 B 同時讀取同一份設定檔，各自修改不同欄位後寫回本地快取，後寫入的分頁會直接覆蓋先寫入的分頁結果。
-3. **認證權杖刷新衝突（Token Refresh Collision）**：當 Access Token 過期時，多個分頁同時拿舊的 Refresh Token 去換發新憑證，導致後端判定重放攻擊而強制登出所有分頁。
+3. **認證權杖刷新衝突（Token Refresh Collision）**：當 Access Token 過期時，多個分頁同時拿舊的 Refresh Token 去換發新憑證，若後端啟用了 Refresh Token Rotation 與重複使用偵測（Reuse Detection），舊權杖被第二次使用會被判定為疑似遭竊，整組權杖家族隨即失效，導致所有分頁被強制登出（見 S9）。
 
 ## 運作機制與生活類比 (Mechanism & Analogy)
 
@@ -24,3 +24,9 @@ tags: [concurrency, race-condition, duplicate-requests, lost-update]
 
 - **記憶體隔離特性**：JavaScript 的閉包（Closure）、全域變數或單例模式（Singleton Pattern）僅在「單一分頁內部」有效，跨分頁完全無效。
 - **觸發時機不可預測**：使用者隨時可能按 `Ctrl+T` 複製分頁、從書籤開啟多個分頁，或同時喚醒休眠中的背景分頁（Background Tabs），問題往往在無預警的瞬間同時爆發。
+
+## 參考來源 (Sources)
+
+- [S1] MDN — Web Locks API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+- [S4] MDN — Web Storage API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
+- [S9] Auth0 Docs — Refresh Token Rotation：https://auth0.com/docs/secure/tokens/refresh-tokens/refresh-token-rotation

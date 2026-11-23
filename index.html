@@ -655,7 +655,7 @@
           </div>
           <div class="card">
             <h3 style="color: var(--accent-purple);">3. Token 刷新衝突</h3>
-            <p>多個分頁同時拿舊的 Refresh Token 換發新憑證，觸發後端重放攻擊防護而強制登出所有分頁。</p>
+            <p>多個分頁同時拿同一個 Refresh Token 換發，若後端啟用重複使用偵測，會判定權杖遭竊而強制登出所有分頁。</p>
           </div>
         </div>
       </div>

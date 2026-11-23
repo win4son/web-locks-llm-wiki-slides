@@ -28,3 +28,9 @@ tags: [architecture, trade-offs, redis, distributed-lock, scope]
 
 - **無痕模式隔離（Incognito / Private Browsing Isolation）**：瀏覽器的無痕視窗擁有獨立的儲存空間與 Lock Manager，與一般視窗之間不會共享鎖定狀態。
 - **不能取代後端安全驗證**：前端協調機制屬於「效能與體驗最佳化（Client-Side Optimization）」，惡意使用者仍可透過開發者工具繞過前端鎖直接發送請求，因此關鍵資料的一致性與權限檢查仍須由後端把關。
+
+## 參考來源 (Sources)
+
+- [S3] W3C — Web Locks API（Working Draft）：https://www.w3.org/TR/web-locks/
+- [S4] MDN — Web Storage API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
+- [S8] Redis Docs — Distributed Locks with Redis：https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/

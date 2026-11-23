@@ -6,7 +6,7 @@ tags: [web-locks, navigator.locks, exclusive-lock, shared-lock, lifecycle]
 
 ## 核心定義 (Core Definition)
 
-**Web Locks API**（透過 `navigator.locks` 介面存取）是 W3C 制定的瀏覽器原生併發控制標準。它允許同源（Same-Origin）下的多個分頁、iframe 或 Web Worker，針對特定名稱的資源申請**非同步鎖（Asynchronous Locks）**，並由瀏覽器核心底層保證鎖的**原子性分配**與**生命週期自動清理**。
+**Web Locks API**（透過 `navigator.locks` 介面存取）是由 W3C Web Applications Working Group 制定中的瀏覽器原生併發控制規格（目前為 Working Draft，主流瀏覽器自 2022 年 3 月起皆已支援）。它允許同源（Same-Origin）下的多個分頁、iframe 或 Web Worker，針對特定名稱的資源申請**非同步鎖（Asynchronous Locks）**，並由瀏覽器核心底層保證鎖的**原子性分配**與**生命週期自動清理**。
 
 ## 為什麼重要 / 解決什麼問題 (Problem & Motivation)
 
@@ -29,3 +29,9 @@ Web Locks API 從根本上消滅了 `WIKI-02` 中傳統方案的兩大致命傷�
 - **安全上下文限制（Secure Context Required）**：`navigator.locks` 僅能在 **HTTPS** 環境或本機開發環境（`localhost` / `127.0.0.1`）下使用，普通 HTTP 網頁無法存取。
 - **嚴格同源隔離（Origin-Scoped）**：不同網域（例如 `app.example.com` 與 `admin.example.com`）各自擁有獨立的 Lock Manager，彼此的鎖互不干擾。
 - **跨分頁無直接資料通道**：Web Locks API 本身**只負責排隊與互斥控制，不負責傳遞回傳資料**；若要讓排隊的分頁直接拿到第一個分頁抓取的結果，必須搭配共享儲存或通訊機制（見 `WIKI-04`）。
+
+## 參考來源 (Sources)
+
+- [S1] MDN — Web Locks API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+- [S2] MDN — LockManager: request() method：https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request
+- [S3] W3C — Web Locks API（Working Draft）：https://www.w3.org/TR/web-locks/

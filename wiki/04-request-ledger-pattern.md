@@ -27,3 +27,9 @@ tags: [request-ledger, single-flight, coordination, zero-dependency]
 
 - **必須執行二次檢查（Double-Checked Locking）**：缺少步驟 3 會導致所有排隊分頁重複執行請求，失去協調意義。
 - **資料序列化成本**：帳本若存放在 `localStorage` 中，資料必須經過 `JSON.stringify` / `JSON.parse`，不適合存放數 MB 以上的龐大二進位檔案（大型資料應改用 `IndexedDB` 作為帳本載體）。
+
+## 參考來源 (Sources)
+
+- [S1] MDN — Web Locks API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API
+- [S2] MDN — LockManager: request() method：https://developer.mozilla.org/en-US/docs/Web/API/LockManager/request
+- [S4] MDN — Web Storage API：https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
