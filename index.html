@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>教學簡報：瀏覽器多分頁狀態同步與分散式鎖（Web Locks API）</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #1e293b;
+      --border-color: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --accent-emerald: #34d399;
+      --accent-amber: #fbbf24;
+      --accent-rose: #fb7185;
+      --accent-purple: #a78bfa;
+      --wiki-badge-bg: rgba(56, 189, 248, 0.15);
+      --wiki-badge-border: rgba(56, 189, 248, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    /* Top Navigation & Progress Bar */
+    .top-bar {
+      min-height: 54px;
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background-color: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border-color);
+      z-index: 20;
+      flex-shrink: 0;
+    }
+
+    .deck-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      line-height: 1.3;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--accent-blue);
+      box-shadow: 0 0 10px var(--accent-blue);
+    }
+
+    .top-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      padding: 6px 13px;
+      border-radius: 6px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(52, 211, 153, 0.25);
+    }
+
+    .toggle-btn.active {
+      background: var(--accent-emerald);
+      color: #064e3b;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-emerald));
+      width: 11.1%;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Slide Viewport */
+    .slides-viewport {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 28px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .slide {
+      display: none;
+      width: 100%;
+      max-width: 1160px;
+      height: 100%;
+      max-height: 100%;
+      background: linear-gradient(145deg, #162033 0%, #0f172a 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 28px 36px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      animation: fadeSlideIn 0.3s ease-out;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #334155 transparent;
+    }
+
+    .slide::-webkit-scrollbar {
+      width: 6px;
+    }
+    .slide::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.7);
+      padding-bottom: 14px;
+      flex-shrink: 0;
+    }
+
+    .header-title-group {
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .slide-kicker {
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-blue);
+      margin-bottom: 4px;
+    }
+
+    .slide-title {
+      font-size: clamp(1.35rem, 2.2vw, 1.8rem);
+      font-weight: 800;
+      line-height: 1.3;
+      color: var(--text-primary);
+    }
+
+    .wiki-badge {
+      flex-shrink: 0;
+      background: var(--wiki-badge-bg);
+      border: 1px solid var(--wiki-badge-border);
+      color: var(--accent-blue);
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    /* Slide Body Layouts */
+    .slide-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+      user-select: text;
+    }
+
+    .lead-text {
+      font-size: 0.96rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .card h3 {
+      font-size: 1.05rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card p, .card li {
+      font-size: 0.93rem;
+      line-height: 1.58;
+      color: var(--text-secondary);
+    }
+
+    .card ul {
+      padding-left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .analogy-box {
+      background: rgba(251, 191, 36, 0.08);
+      border-left: 4px solid var(--accent-amber);
+      border-radius: 0 10px 10px 0;
+      padding: 14px 18px;
+    }
+
+    .analogy-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--accent-amber);
+      margin-bottom: 5px;
+    }
+
+    .analogy-text {
+      font-size: 0.93rem;
+      line-height: 1.55;
+      color: var(--text-primary);
+    }
+
+    .code-block {
+      background: #090d16;
+      border: 1px solid #263248;
+      border-radius: 10px;
+      padding: 15px 18px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.84rem;
+      line-height: 1.55;
+      color: #e2e8f0;
+      overflow-x: auto;
+    }
+
+    .kw { color: #c084fc; }
+    .fn { color: #38bdf8; }
+    .str { color: #34d399; }
+    .cm { color: #64748b; }
+
+    /* Step Flow Diagram (4-col desktop, 2-col medium, 1-col mobile) */
+    .flow-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .step-item {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid var(--border-color);
+      border-top: 4px solid var(--accent-blue);
+      border-radius: 10px;
+      padding: 15px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .step-item:nth-child(3) {
+      border-top-color: var(--accent-emerald);
+    }
+
+    .step-num {
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--accent-blue);
+    }
+
+    .step-item:nth-child(3) .step-num {
+      color: var(--accent-emerald);
+    }
+
+    .step-item h4 {
+      font-size: 1rem;
+      color: var(--text-primary);
+      line-height: 1.35;
+    }
+
+    .step-item p {
+      font-size: 0.88rem;
+      line-height: 1.55;
+      color: var(--text-secondary);
+    }
+
+    /* Comparison Table */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      line-height: 1.5;
+    }
+
+    th {
+      background: rgba(30, 41, 59, 0.95);
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+
+    td {
+      color: var(--text-secondary);
+    }
+
+    .tag-bad {
+      color: var(--accent-rose);
+      font-weight: 700;
+    }
+
+    .tag-good {
+      color: var(--accent-emerald);
+      font-weight: 700;
+    }
+
+    /* Cover Slide Specific */
+    .cover-center {
+      text-align: center;
+      align-items: center;
+      max-width: 840px;
+      margin: 0 auto;
+    }
+
+    .cover-title {
+      font-size: clamp(1.9rem, 3.6vw, 2.6rem);
+      font-weight: 900;
+      line-height: 1.25;
+      background: linear-gradient(135deg, #ffffff 0%, #38bdf8 60%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 14px;
+    }
+
+    .cover-subtitle {
+      font-size: clamp(1rem, 1.5vw, 1.15rem);
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin-bottom: 24px;
+    }
+
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .pill {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--accent-blue);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    /* Provenance Drawer (Toggled) */
+    .provenance-panel {
+      display: none;
+      background: rgba(6, 78, 59, 0.35);
+      border: 1px solid rgba(52, 211, 153, 0.45);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: #a7f3d0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      flex-shrink: 0;
+    }
+
+    body.show-provenance .provenance-panel {
+      display: block;
+    }
+
+    /* Bottom Navigation Controls */
+    .bottom-bar {
+      min-height: 52px;
+      padding: 8px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid var(--border-color);
+      background: rgba(15, 23, 42, 0.95);
+      flex-shrink: 0;
+    }
+
+    .nav-hint {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .nav-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .nav-btn {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 6px 15px;
+      border-radius: 6px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: #334155;
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .page-indicator {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      min-width: 56px;
+      text-align: center;
+    }
+
+    /* Responsive Breakpoints */
+    @media (max-width: 980px) {
+      .slides-viewport {
+        padding: 14px 18px;
+      }
+      .slide {
+        padding: 22px 24px;
+      }
+      .flow-steps {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .grid-2, .flow-steps {
+        grid-template-columns: 1fr;
+      }
+      .nav-hint {
+        display: none;
+      }
+      .bottom-bar {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="deck-brand">
+      <span class="brand-dot"></span>
+      <span>LLM Wiki Grounded Presentation · Multi-Tab State Coordination</span>
+    </div>
+    <div class="top-controls">
+      <button id="toggleProvenanceBtn" class="toggle-btn" onclick="toggleProvenance()">
+        🔍 顯示 Wiki 知識溯源
+      </button>
+    </div>
+  </header>
+  <div class="progress-track">
+    <div id="progressFill" class="progress-fill"></div>
+  </div>
+
+  <!-- Main Viewport -->
+  <main class="slides-viewport">
+
+    <!-- SLIDE 1: Cover -->
+    <section class="slide active" data-slide="1">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">Interactive Tutorial Deck</div>
+          <div class="slide-title" style="font-size: 1.05rem; color: var(--text-muted);">Zero-Runtime-Dependency Web Architecture</div>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-00 (index.md)</div>
+      </div>
+
+      <div class="slide-body cover-center">
+        <h1 class="cover-title">瀏覽器多分頁狀態同步與分散式鎖</h1>
+        <p class="cover-subtitle">
+          當使用者同時開啟 5 個分頁時，如何避免重複發送 API 請求與資料覆寫？<br />
+          認識瀏覽器原生 <strong>Web Locks API</strong> 與 <strong>請求帳本模式（Request Ledger Pattern）</strong>
+        </p>
+        <div class="pill-group">
+          <span class="pill">受眾：具備基礎 JS 概念的初學者</span>
+          <span class="pill">核心原則：零外部套件依賴</span>
+          <span class="pill">知識來源：WIKI-00 ~ WIKI-06</span>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/index.md (WIKI-00) ｜ 引用段落：知識庫總覽、受眾定位與核心術語表（Same-Origin、Race Condition、Single-Flight）。
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Core Glossary (WIKI-00) -->
+    <section class="slide" data-slide="2">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">01 · 建立共通語言</div>
+          <h2 class="slide-title">開始前必懂的 4 個核心概念</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-00 (index.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="card">
+            <h3 style="color: var(--accent-blue);">🌐 同源（Same-Origin）</h3>
+            <p>指協定（Protocol）、網域（Host）與連接埠（Port）完全相同的網頁分頁。同源分頁共享同一組瀏覽器儲存空間與鎖定管理器（Lock Manager）。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-rose);">⚡ 競態條件（Race Condition）</h3>
+            <p>多個分頁在缺乏協調的情況下同時讀寫同一份資源，導致最終資料結果取決於不可預測的執行順序。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-amber);">⚛️ 原子性（Atomicity）</h3>
+            <p>一個操作要嘛全部完成，要嘛完全不執行，中間絕對不會被其他分頁插隊打斷。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-emerald);">✈️ 單一飛行請求（Single-Flight）</h3>
+            <p>多個分頁同時需要同一份遠端資料時，僅允許一位領導分頁（Leader）實際發送請求，其餘分頁等待並共用結果。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/index.md (WIKI-00) ｜ 引用段落：## 核心術語表 (Glossary) 四項標準定義。
+      </div>
+    </section>
+
+    <!-- SLIDE 3: Multi-Tab Problem (WIKI-01) -->
+    <section class="slide" data-slide="3">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">02 · 問題痛點</div>
+          <h2 class="slide-title">為什麼「多開幾個分頁」會讓系統出錯？</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-01 (01-multi-tab-problem.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="analogy-box">
+          <div class="analogy-title">💡 生活化類比：5 位沒有溝通的辦公室助理</div>
+          <div class="analogy-text">
+            想像辦公室裡有 <strong>5 位助理（5 個分頁）</strong>，共用同一份<strong>紙本客戶名單（本地儲存）</strong>與<strong>外線電話（網路請求）</strong>。當主管說「查一下客戶最新地址」時，5 個人同時打同一支電話詢問，甚至同時拿筆塗改同一張紙，把彼此的紀錄蓋掉。
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <h3 style="color: var(--accent-rose);">1. 重複請求與費用暴增</h3>
+            <p>開啟 5 個分頁就向雲端資料庫發送 5 次相同查詢，造成 5 倍讀取計費與頻寬浪費。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-amber);">2. 資料覆寫遺失（Lost Update）</h3>
+            <p>分頁 A 與 B 同時讀取設定檔並修改不同欄位，後寫入的分頁會直接覆蓋先寫入的結果。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-purple);">3. Token 刷新衝突</h3>
+            <p>多個分頁同時拿舊的 Refresh Token 換發新憑證，觸發後端重放攻擊防護而強制登出所有分頁。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/01-multi-tab-problem.md (WIKI-01) ｜ 引用段落：## 為什麼重要 / 解決什麼問題、## 運作機制與生活類比（記憶體隔離特性）。
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Legacy Approaches (WIKI-02) -->
+    <section class="slide" data-slide="4">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">03 · 傳統解法的缺陷</div>
+          <h2 class="slide-title">為什麼 localStorage 與 BroadcastChannel 不夠用？</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-02 (02-legacy-approaches.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="analogy-box">
+          <div class="analogy-title">💡 生活化類比：貼在白板上的便條紙鎖</div>
+          <div class="analogy-text">
+            傳統做法就像用 <code>localStorage.setItem('lock', 'true')</code> 在白板貼便條紙：兩位助理可能<strong>同一毫秒看到白板是空的而同時貼上去</strong>；更糟的是，如果貼便條紙的助理<strong>突然暈倒離開（分頁崩潰或強制關閉）</strong>，便條紙會永遠留在白板上。
+          </div>
+        </div>
+
+        <div class="card table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>傳統協調方案</th>
+                <th>運作方式</th>
+                <th>致命技術缺陷</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>localStorage 標記輪詢</strong></td>
+                <td>先 <code>getItem()</code> 檢查，再 <code>setItem()</code> 上鎖</td>
+                <td><span class="tag-bad">1. 非原子性（TOCTOU 漏洞）</span>：兩分頁同時搶到鎖<br /><span class="tag-bad">2. 殭屍鎖（Zombie Lock）</span>：分頁當機無法自動清除鎖</td>
+              </tr>
+              <tr>
+                <td><strong>BroadcastChannel API</strong></td>
+                <td>透過訊息通道廣播「我正在抓資料」</td>
+                <td><span class="tag-bad">無狀態性（Stateless）</span>：新開的分頁收不到歷史廣播，也無法感知發送者是否已經當機</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/02-legacy-approaches.md (WIKI-02) ｜ 引用段落：## 運作機制與生活類比（白板便條紙、殭屍鎖、BroadcastChannel 無狀態性）。
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Web Locks API (WIKI-03) -->
+    <section class="slide" data-slide="5">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">04 · 瀏覽器原生救星</div>
+          <h2 class="slide-title">Web Locks API：瀏覽器內建的智慧門禁管理員</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-03 (03-web-locks-api.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="analogy-box">
+          <div class="analogy-title">💡 生活化類比：24 小時在崗的智慧門禁系統</div>
+          <div class="analogy-text">
+            <code>navigator.locks</code> 由瀏覽器核心底層統一管理排隊佇列（保證<strong>原子性</strong>）。一旦持有鎖的分頁被關閉、重新整理或當機，門禁系統感應到執行環境終止，會<strong>立即自動解鎖</strong>並交給下一位排隊者，徹底消滅殭屍鎖。
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3 style="color: var(--accent-emerald);">🔑 鎖的生命週期與兩種模式</h3>
+            <ul>
+              <li><strong>Promise 驅動釋放</strong>：不需手動呼叫 <code>unlock()</code>，只要 callback 回傳的 <code>Promise</code> 結束（Fulfilled 或 Rejected），鎖就自動釋放。</li>
+              <li><strong><code>exclusive</code>（獨占鎖，預設）</strong>：同一時間僅 1 個分頁持有，適合發起唯一網路請求或寫入資料。</li>
+              <li><strong><code>shared</code>（共享鎖）</strong>：允許多個分頁同時讀取，但會阻擋獨占鎖進入。</li>
+            </ul>
+          </div>
+          <div class="code-block">
+<span class="cm">// 申請名為 'sync-user-profile' 的獨占鎖</span>
+<span class="kw">await</span> navigator.locks.<span class="fn">request</span>(<span class="str">'sync-user-profile'</span>, <span class="kw">async</span> (lock) => {
+  <span class="cm">// 同一時間全瀏覽器只有 1 個同源分頁能進入此區塊</span>
+  <span class="kw">const</span> data = <span class="kw">await</span> <span class="fn">fetchProfileFromCloud</span>();
+  <span class="kw">await</span> <span class="fn">saveToSharedLedger</span>(data);
+  <span class="cm">// 函式結束（Promise Resolve）時，瀏覽器自動釋放鎖！</span>
+});
+          </div>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/03-web-locks-api.md (WIKI-03) ｜ 引用段落：## 核心定義、## 運作機制與生活類比（Promise-Driven Lifecycle、Exclusive vs Shared）。
+      </div>
+    </section>
+
+    <!-- SLIDE 6: Request Ledger Pattern (WIKI-04) -->
+    <section class="slide" data-slide="6">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">05 · 完整協調架構</div>
+          <h2 class="slide-title">請求帳本模式（Request Ledger）：從「排隊」進化到「共享」</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-04 (04-request-ledger-pattern.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <p class="lead-text">
+          <strong>關鍵洞察（WIKI-03 & WIKI-04）</strong>：Web Locks 只負責排隊，不負責傳遞資料。若沒有搭配<strong>共享狀態帳本（Request Ledger）</strong>，排在後面的 4 個分頁取得鎖後仍會各自重打 API。結合「公用登記帳本」與<strong>雙重檢查鎖定（Double-Checked Locking）</strong>即可實現真正的 Single-Flight：
+        </p>
+
+        <div class="flow-steps">
+          <div class="step-item">
+            <div class="step-num">STEP 1 · FAST-PATH</div>
+            <h4>快速路徑檢查</h4>
+            <p>先讀取本地帳本（如 <code>localStorage</code>），若已有未過期的有效結果，直接回傳，連鎖都不用申請。</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">STEP 2 · LOCK</div>
+            <h4>申請獨占鎖排隊</h4>
+            <p>無有效快取時，呼叫 <code>navigator.locks.request()</code> 排隊，選出一位 <strong>Leader 分頁</strong>。</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">STEP 3 · DOUBLE-CHECK</div>
+            <h4>取得鎖後二次檢查</h4>
+            <p><strong>最關鍵步驟！</strong>進入鎖後再查一次帳本，若 Leader 剛寫入資料，Follower 直接讀取並結束。</p>
+          </div>
+          <div class="step-item">
+            <div class="step-num">STEP 4 · COMMIT</div>
+            <h4>發送請求並記帳</h4>
+            <p>確認仍無資料才發送網路請求，將結果與時間戳寫入帳本後自動釋放鎖。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/04-request-ledger-pattern.md (WIKI-04) ｜ 引用段落：## 為什麼重要、## 運作機制與生活類比（公用登記帳本與標準執行四步驟 Double-Checked Locking）。
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Failure Handling & Deadlock Prevention (WIKI-05) -->
+    <section class="slide" data-slide="7">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">06 · 防禦性工程設計</div>
+          <h2 class="slide-title">異常處理與死鎖預防：如果網路卡死怎麼辦？</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-05 (05-failure-recovery.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <p class="lead-text">
+          即使分頁沒有崩潰，若持有鎖的 Leader 發送了一個<strong>永遠不回應的網路請求</strong>，Promise 就會永遠卡在 <code>Pending</code>，導致所有排隊分頁凍結。我們需要三道防禦機制：
+        </p>
+
+        <div class="grid-3">
+          <div class="card">
+            <h3 style="color: var(--accent-blue);">⏱️ 1. 超時強制中斷</h3>
+            <p>傳入 <code>AbortSignal</code> 限制<strong>排隊等待時間</strong>；並在內部對 <code>fetch</code> 設定 Timeout，確保 callback 內的 Promise 必定會結束並釋放鎖。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-amber);">👀 2. 非阻塞試探模式</h3>
+            <p>設定 <code>{ ifAvailable: true }</code>。若鎖已被佔用，瀏覽器不排隊而直接回傳 <code>null</code>，適合背景定期清理或非緊急日誌同步。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-emerald);">🔄 3. 錯誤隔離與接力</h3>
+            <p>Leader 請求失敗時不寫入空值到帳本，直接結束 Promise 釋放鎖，讓佇列中的下一個 Follower 無縫接手重試。</p>
+          </div>
+        </div>
+
+        <div class="analogy-box" style="border-left-color: var(--accent-rose); background: rgba(251, 113, 133, 0.08);">
+          <div class="analogy-title" style="color: var(--accent-rose);">⚠️ 鐵則：嚴禁巢狀鎖定（Avoid Nested Locks）</div>
+          <div class="analogy-text">
+            切勿在持有 <code>Lock A</code> 的內部再去申請 <code>Lock B</code>，否則當另一分頁以相反順序（先 B 後 A）申請時，將造成無解的循環等待死鎖。
+          </div>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/05-failure-recovery.md (WIKI-05) ｜ 引用段落：## 三大原生防禦機制（AbortController、ifAvailable、Rollback）與 ## 關鍵限制（Avoid Nested Locks）。
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Architecture Trade-offs (WIKI-06) -->
+    <section class="slide" data-slide="8">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">07 · 架構邊界與選型</div>
+          <h2 class="slide-title">什麼時候用 Web Locks？什麼時候該用 Redis？</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-06 (06-architecture-tradeoffs.md)</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="analogy-box">
+          <div class="analogy-title">💡 生活化類比：家裡的浴室門鎖 vs 全國演唱會售票系統</div>
+          <div class="analogy-text">
+            <strong>Web Locks API</strong> 是「家裡的浴室門鎖」，只協調同一棟房子裡的家人（同一瀏覽器的同源分頁）；<strong>Redis 分散式鎖</strong> 則是「全國售票中央資料庫鎖」，協調全台灣不同手機、不同電腦的使用者搶同一張票。
+          </div>
+        </div>
+
+        <div class="card table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>比較維度</th>
+                <th>Web Locks + Request Ledger</th>
+                <th>後端分散式鎖（如 Redis / DB Lock）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>協調範圍</strong></td>
+                <td><span class="tag-good">單一裝置、同一瀏覽器同源分頁</span></td>
+                <td>跨裝置（手機 + 電腦）、跨全球使用者</td>
+              </tr>
+              <tr>
+                <td><strong>基礎設施成本</strong></td>
+                <td><span class="tag-good">零成本、零外部依賴（瀏覽器原生）</span></td>
+                <td>需維護 Redis 叢集與網路延遲開銷</td>
+              </tr>
+              <tr>
+                <td><strong>典型適用場景</strong></td>
+                <td>避免多分頁重複查設定檔、OAuth Token 刷新</td>
+                <td>電商庫存扣減、金融轉帳、搶票系統</td>
+              </tr>
+              <tr>
+                <td><strong>限制邊界</strong></td>
+                <td>無痕視窗（Incognito）獨立隔離；不可取代後端權限驗證</td>
+                <td>不適合處理純前端 UI 重複渲染與快取協調</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/06-architecture-tradeoffs.md (WIKI-06) ｜ 引用段落：## 運作機制與生活類比（浴室門鎖 vs 售票系統）、## 適用場景對照矩陣與無痕模式隔離限制。
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Summary & Takeaways (WIKI-00 ~ WIKI-06) -->
+    <section class="slide" data-slide="9">
+      <div class="slide-header">
+        <div class="header-title-group">
+          <div class="slide-kicker">08 · 總結與重點回顧</div>
+          <h2 class="slide-title">建立零依賴多分頁協調系統的三個關鍵</h2>
+        </div>
+        <div class="wiki-badge">📚 Source: WIKI-01 ~ WIKI-06</div>
+      </div>
+
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="card">
+            <h3 style="color: var(--accent-blue);">1. 捨棄手動標記鎖</h3>
+            <p>不再用 <code>localStorage</code> 拼湊非原子鎖，改用原生 <code>navigator.locks</code> 獲得原子排隊與崩潰自動釋放保障（<strong>WIKI-02, WIKI-03</strong>）。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-emerald);">2. 鎖 + 帳本二次檢查</h3>
+            <p>透過 Request Ledger 搭配 Double-Checked Locking，讓單一 Leader 抓取資料、其餘 Followers 直接複用結果（<strong>WIKI-04</strong>）。</p>
+          </div>
+          <div class="card">
+            <h3 style="color: var(--accent-amber);">3. 守住超時與架構邊界</h3>
+            <p>加上 <code>AbortSignal</code> 超時防護避免請求卡死，並明確區分前端體驗最佳化與後端資料一致性邊界（<strong>WIKI-05, WIKI-06</strong>）。</p>
+          </div>
+        </div>
+
+        <div class="card" style="text-align: center; background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.35);">
+          <p style="color: var(--text-primary); font-weight: 600;">
+            本簡報所有概念、類比與限制條件均嚴格萃取自 <code>wiki/index.md</code> 至 <code>wiki/06-architecture-tradeoffs.md</code>。<br />
+            <span style="color: var(--accent-emerald); font-size: 0.9rem;">提示：點擊右上角「🔍 顯示 Wiki 知識溯源」可逐頁檢視對應的知識庫檔案與段落。</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="provenance-panel">
+        [Wiki 溯源對應] 檔案：wiki/01-multi-tab-problem.md ~ wiki/06-architecture-tradeoffs.md ｜ 跨條目整合總結。
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Bar -->
+  <footer class="bottom-bar">
+    <div class="nav-hint">⌨️ 操作提示：使用鍵盤 <strong>← / →</strong> 方向鍵或 <strong>Space</strong> 切換投影片</div>
+    <div class="nav-buttons">
+      <button id="prevBtn" class="nav-btn" onclick="changeSlide(-1)">← 上一頁</button>
+      <span id="pageIndicator" class="page-indicator">1 / 9</span>
+      <button id="nextBtn" class="nav-btn" onclick="changeSlide(1)">下一頁 →</button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    let currentSlide = 0;
+
+    const progressFill = document.getElementById('progressFill');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const toggleBtn = document.getElementById('toggleProvenanceBtn');
+
+    function updateSlideUI() {
+      slides.forEach((slide, index) => {
+        const isActive = index === currentSlide;
+        slide.classList.toggle('active', isActive);
+        if (isActive) {
+          slide.scrollTop = 0;
+        }
+      });
+
+      const progressPercent = ((currentSlide + 1) / totalSlides) * 100;
+      progressFill.style.width = `${progressPercent}%`;
+      pageIndicator.textContent = `${currentSlide + 1} / ${totalSlides}`;
+
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+    }
+
+    function changeSlide(delta) {
+      const nextIndex = currentSlide + delta;
+      if (nextIndex >= 0 && nextIndex < totalSlides) {
+        currentSlide = nextIndex;
+        updateSlideUI();
+      }
+    }
+
+    function toggleProvenance() {
+      const isShowing = document.body.classList.toggle('show-provenance');
+      toggleBtn.classList.toggle('active', isShowing);
+      toggleBtn.textContent = isShowing ? '✅ 已開啟 Wiki 知識溯源' : '🔍 顯示 Wiki 知識溯源';
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        changeSlide(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        changeSlide(-1);
+      }
+    });
+
+    updateSlideUI();
+  </script>
+</body>
+</html>
